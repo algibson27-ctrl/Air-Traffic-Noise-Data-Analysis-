@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sydney Airport Noise Impact</title>
+<style>
+  :root {
+    --bg: #0b1220; --card: #1a2332; --accent: #38bdf8; --text: #e2e8f0; --muted: #94a3b8;
+    --low: #4ade80; --medium: #fbbf24; --high: #fb923c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, -apple-system, sans-serif;
+    background: linear-gradient(180deg, #0b1220 0%, #111827 100%);
+    color: var(--text); padding: 0.75rem; min-height: 100vh;
+  }
+  .container { max-width: 480px; margin: 0 auto; }
+  h1 { text-align: center; font-size: 1.35rem; margin: 0.4rem 0 0.2rem; }
+  .subtitle { text-align: center; color: var(--muted); font-size: 0.8rem; margin-bottom: 0.6rem; }
+  .summary-banner {
+    background: #1e3a5f; border-radius: 12px; padding: 0.7rem 1rem; margin-bottom: 0.75rem;
+    text-align: center; font-weight: 600; font-size: 0.95rem;
+  }
+  .alert-banner {
+    background: #7c2d12; border-radius: 12px; padding: 0.6rem 1rem; margin-bottom: 0.75rem;
+    text-align: center; font-size: 0.9rem;
+  }
+  .card {
+    background: var(--card); border-radius: 16px; padding: 1rem; margin-bottom: 0.75rem;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.25); border: 1px solid #2d3a4f;
+  }
+  .card h2 { margin: 0 0 0.5rem; font-size: 0.95rem; color: var(--accent); display: flex; align-items: center; gap: 0.4rem; }
+  .badge {
+    display: inline-block; padding: 0.4rem 1rem; border-radius: 999px;
+    font-weight: 700; font-size: 1.15rem; margin: 0.3rem 0 0.6rem; color: #0f172a;
+  }
+  .low { background: var(--low); } .medium { background: var(--medium); } .high { background: var(--high); }
+  .curfew { background: #64748b; color: #fff; }
+  .bar { height: 8px; border-radius: 4px; background: #334155; margin: 0.4rem 0 0.7rem; overflow: hidden; }
+  .fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+  .detail { font-size: 0.9rem; line-height: 1.4; }
+  .status { font-size: 0.73rem; color: var(--muted); margin-top: 0.4rem; }
+  .row { display: flex; justify-content: space-between; margin: 0.25rem 0; font-size: 0.9rem; }
+  .flight { padding: 0.55rem 0; border-bottom: 1px solid #2d3a4f; font-size: 0.86rem; }
+  .flight strong { color: var(--accent); }
+  .eta { color: var(--medium); font-weight: 600; }
+  button {
+    background: var(--accent); color: #0f172a; border: none; padding: 0.7rem; border-radius: 12px;
+    font-weight: 600; width: 100%; cursor: pointer; font-size: 1rem;
+  }
+  .icon { font-size: 1.1rem; }
+  footer { text-align: center; font-size: 0.65rem; color: var(--muted); margin-top: 0.6rem; }
+  .share-btn { background: #334155; color: var(--text); margin-top: 0.5rem; }
+  .forecast-item { padding: 0.5rem 0; border-bottom: 1px solid #2d3a4f; font-size: 0.88rem; }
+  .forecast-item:last-child { border-bottom: none; }
+  .db { font-weight: 600; color: var(--medium); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>✈️ Sydney Air Traffic Noise Data</h1>
+  <p class="subtitle">Absolute + relative impact · YSSY only</p>
+
+  <div id="summaryBanner" class="summary-banner">Loading summary…</div>
+  <div id="alertBanner" class="alert-banner" style="display:none;"></div>
+
+  <div style="text-align:center; margin-bottom:0.7rem;">
+    <button id="useLocation">📍 Use My Location</button>
+    <div class="status" id="locStatus">Tap the button and allow location when prompted</div>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon">📊</span> Current Impact</h2>
+    <div id="absolute"></div>
+    <div id="avgDb" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon">📉</span> Relative to Normal</h2>
+    <div id="relative"></div>
+  </div>
+
+  <div class="card" id="curfewCard" style="text-align:center;">
+    <h2><span class="icon">🌙</span> Curfew Countdown</h2>
+    <div id="curfewDisplay" style="font-size:1.8rem; font-weight:700; margin:0.5rem 0;">—</div>
+    <div id="curfewSub" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon">🗺️</span> Area Exposure</h2>
+    <div id="rank"></div>
+    <div id="suburbRating" class="detail" style="margin-top:0.4rem;"></div>
+    <div id="volumeNote" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon">🛫</span> Relevant Flights <span class="status">(≤ 2 hrs)</span></h2>
+    <div id="flights">Loading…</div>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon">💨</span> Current Wind</h2>
+    <div id="wind"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon">🔮</span> Upcoming Wind Impact</h2>
+    <div id="forecastImpact">Loading forecast…</div>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon">📅</span> Seasonal Wind & Noise Guide</h2>
+    <div id="seasonalGuide"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon">☁️</span> Weather Effect on Noise</h2>
+    <div id="weatherImpact"></div>
+  </div>
+
+  <button class="share-btn" id="shareBtn">Share today’s rating</button>
+
+  <footer>Reliable YSSY data only · Curfew 11pm–6am · dB estimates are approximate</footer>
+</div>
+
+<script>
+const AIRPORT = { lat: -33.9461, lon: 151.177, icao: 'YSSY' };
+const $ = id => document.getElementById(id);
+const state = { lat: -33.895, lon: 151.16, windDir: null, windSpeed: null, taf: null, weather: '', clouds: [], nearArrivals: 0, nearDepartures: 0, avgGapMin: 30 };
+
+const NOISE_DB = { A388:92,A380:92,B744:88,B748:86,B77W:84,B772:83,A359:80,B789:78,A333:76,B738:72,A320:70,A321:71,E190:65,default:68 };
+function noiseDb(t) { return NOISE_DB[t] || NOISE_DB.default; }
+
+function isCurfew() {
+  const now = new Date(), utc = now.getTime() + now.getTimezoneOffset()*60000;
+  const h = new Date(utc + 11*3600000).getHours();
+  return h >= 23 || h < 6;
+}
+function isPeak() {
+  const now = new Date(), utc = now.getTime() + now.getTimezoneOffset()*60000;
+  const h = new Date(utc + 11*3600000).getHours();
+  return (h >= 7 && h <= 9) || (h >= 16 && h <= 19);
+}
+function isWeekend() {
+  const now = new Date(), utc = now.getTime() + now.getTimezoneOffset()*60000;
+  const day = new Date(utc + 11*3600000).getDay();
+  return day === 0 || day === 6;
+}
+function minsToCurfew() {
+  const now = new Date(), utc = now.getTime() + now.getTimezoneOffset()*60000;
+  const syd = new Date(utc + 11*3600000);
+  const h = syd.getHours(), m = syd.getMinutes();
+  if (h >= 23 || h < 6) return 0;
+  return (23 - h) * 60 - m;
+}
+
+function distKm(lat1,lon1,lat2,lon2) {
+  const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function getPos() {
+  const d = distKm(state.lat, state.lon, AIRPORT.lat, AIRPORT.lon);
+  const brg = (Math.atan2(
+    Math.sin((state.lon-AIRPORT.lon)*Math.PI/180)*Math.cos(state.lat*Math.PI/180),
+    Math.cos(AIRPORT.lat*Math.PI/180)*Math.sin(state.lat*Math.PI/180) -
+    Math.sin(AIRPORT.lat*Math.PI/180)*Math.cos(state.lat*Math.PI/180)*Math.cos((state.lon-AIRPORT.lon)*Math.PI/180)
+  )*180/Math.PI + 360) % 360;
+  let dir = 'other';
+  if (brg >= 315 || brg < 45) dir = 'north';
+  else if (brg < 135) dir = 'east';
+  else if (brg < 225) dir = 'south';
+  else dir = 'west';
+  return { dist: d, dir, label: `${d.toFixed(1)} km ${dir}` };
+}
+function windMode(dir) {
+  if (dir == null) return null;
+  const n = Math.cos(dir * Math.PI / 180);
+  return Math.abs(n) > 0.6 ? (n > 0 ? 'north' : 'south') : 'cross';
+}
+function areaBase(pos) {
+  if (pos.dist < 5 && pos.dir === 'north') return 85;
+  if (pos.dist < 8 && pos.dir === 'north') return 75;
+  if (pos.dist < 10 && (pos.dir === 'north' || pos.dir === 'west')) return 65;
+  if (pos.dist < 12) return 50;
+  return 30;
+}
+function currentScore(mode, pos) {
+  if (isCurfew()) return 0;
+  let s = 28;
+  if (pos.dist < 10) s += 10;
+  if (pos.dist < 6) s += 8;
+
+  // Evidence-based for northern suburbs (Airservices flight paths):
+  // South Flow puts arrivals on final over Stanmore / Leichhardt / Petersham
+  // North Flow departures climb out but many turn; less consistent overhead impact
+  if (pos.dir === 'north' && mode === 'south') s += 26;
+  else if (pos.dir === 'north' && mode === 'north') s += 6;
+  else if (pos.dir === 'south' && mode === 'south') s += 14;
+  else if (mode === 'cross') s += (pos.dir === 'north' ? 4 : 8);
+
+  if (isPeak()) s += 4;
+
+  // Frequency + spacing: continuous traffic feels louder than the same number with big gaps
+  const relevantCount = (pos.dir === 'north' && mode === 'south') ? state.nearArrivals
+                      : (pos.dir === 'north' && mode === 'north') ? state.nearDepartures
+                      : (state.nearArrivals + state.nearDepartures);
+  const freqBoost = (mode === 'south') ? 1.0 : 0.5;
+  if (relevantCount >= 10) s += Math.round(16 * freqBoost);
+  else if (relevantCount >= 6) s += Math.round(9 * freqBoost);
+  else if (relevantCount >= 3) s += Math.round(4 * freqBoost);
+
+  // Large gaps reduce perceived impact
+  if (state.avgGapMin > 25) s -= 12;
+  else if (state.avgGapMin > 18) s -= 6;
+  else if (state.avgGapMin < 8 && relevantCount >= 4) s += 6; // tight spacing feels more constant
+
+  return Math.min(100, Math.max(0, s));
+}
+function relativeScore(mode, pos) {
+  const base = areaBase(pos);
+  if (isCurfew()) return 0;
+  // For northern areas, South Flow is now treated as the busier/louder case
+  if (pos.dir === 'north' && mode === 'south') return Math.min(95, base + 5);
+  if (pos.dir === 'north' && mode === 'north') return Math.max(20, base - 25);
+  if (!isPeak() && mode === 'north') return Math.max(18, base - 20);
+  return currentScore(mode, pos);
+}
+function lvl(score) {
+  if (isCurfew()) return { level: 'curfew', label: 'Curfew', color: '#64748b' };
+  if (score >= 72) return { level: 'high', label: 'High', color: 'var(--high)' };
+  if (score >= 45) return { level: 'medium', label: 'Medium', color: 'var(--medium)' };
+  return { level: 'low', label: 'Low', color: 'var(--low)' };
+}
+function scoreToDb(score, pos) {
+  // Rough mapping: closer northern areas higher baseline
+  const baseDb = pos.dist < 6 ? 62 : pos.dist < 10 ? 55 : 48;
+  return Math.round(baseDb + (score / 100) * 18);
+}
+
+function parseForecastImpacts(pos) {
+  if (!state.taf || !state.taf.raw) return [];
+  const tokens = state.taf.raw.match(/\d{5}KT|\d{5}G\d+KT|VRB\d+KT/g) || [];
+  return tokens.slice(0, 4).map((w, i) => {
+    const dir = parseInt(w.slice(0, 3), 10);
+    const spd = w.slice(3, 5);
+    const mode = windMode(dir);
+    const score = currentScore(mode, pos);
+    const level = lvl(score);
+    const label = i === 0 ? 'Current / soon' : `Later (~${i * 3}–${i * 3 + 3}h)`;
+    let impact = 'Similar impact';
+    if (pos.dir === 'north' && mode === 'south') impact = 'Higher impact — arrivals over northern suburbs';
+    else if (pos.dir === 'north' && mode === 'north') impact = 'Lower impact for northern suburbs';
+    else if (mode === 'cross') impact = 'Variable / crosswind conditions';
+    return { label, dir, spd, mode, level: level.label, impact, hours: i * 3 };
+  });
+}
+
+function weatherNoiseNote() {
+  const w = (state.weather || '').toUpperCase();
+  const hasRain = /RA|SH|DZ|TS/.test(w);
+  const hasBknOvc = (state.clouds || []).some(c => c.cover === 'BKN' || c.cover === 'OVC');
+  if (hasRain && hasBknOvc) return 'Rain + broken/overcast cloud — noise can seem louder and travel farther.';
+  if (hasRain) return 'Rain present — moisture can slightly increase perceived noise.';
+  if (hasBknOvc) return 'Broken or overcast cloud — sound more likely to reflect and seem louder.';
+  return 'Clearer conditions — noise generally dissipates more normally.';
+}
+
+function render() {
+  const pos = getPos(), mode = windMode(state.windDir);
+
+  // Outside Sydney area
+  if (pos.dist > 80) {
+    $('summaryBanner').textContent = 'No impact – you are outside the Sydney area';
+    $('absolute').innerHTML = '<div class="badge low">No Impact</div><div class="detail">Location is too far from Sydney Airport for meaningful noise impact.</div>';
+    $('relative').innerHTML = '<div class="detail">Relative rating not applicable.</div>';
+    $('rank').innerHTML = '<div class="detail">Outside Sydney exposure area</div>';
+    $('suburbRating').textContent = '';
+    $('avgDb').textContent = '';
+    $('flights').innerHTML = '<div class="status">Flight data is for Sydney Airport only</div>';
+    $('forecastImpact').innerHTML = '<div class="status">Forecast not relevant for your location</div>';
+    $('weatherImpact').innerHTML = '<div class="status">Weather effect not applicable</div>';
+    $('curfewDisplay').textContent = '—';
+    $('curfewSub').textContent = 'Sydney curfew only';
+    $('alertBanner').style.display = 'none';
+    return;
+  }
+
+  const absS = currentScore(mode, pos), relS = relativeScore(mode, pos);
+  const abs = lvl(absS), rel = lvl(relS), base = areaBase(pos);
+  const avgDb = scoreToDb(absS, pos);
+
+  // One-line summary
+  let summary = 'Checking conditions…';
+  if (isCurfew()) summary = 'Curfew – no commercial noise';
+  else if (pos.dir === 'north' && mode === 'south') summary = 'Busier than average for your area (south flow arrivals)';
+  else if (pos.dir === 'north' && mode === 'north') summary = 'Quieter than average for your area (north flow)';
+  else summary = abs.label + ' impact for your location';
+  $('summaryBanner').textContent = summary;
+
+  // Mode change alert within ~3h
+  const forecasts = parseForecastImpacts(pos);
+  const soonChange = forecasts.find(f => f.hours > 0 && f.hours <= 3 && f.mode && f.mode !== mode);
+  if (soonChange && !isCurfew()) {
+    $('alertBanner').style.display = 'block';
+    $('alertBanner').textContent = `Mode change expected within ~3h → ${soonChange.mode} flow (${soonChange.impact})`;
+  } else {
+    $('alertBanner').style.display = 'none';
+  }
+
+  $('absolute').innerHTML = `
+    <div class="badge ${abs.level}">${abs.label}</div>
+    <div class="bar"><div class="fill" style="width:${absS}%;background:${abs.color}"></div></div>
+    <div class="detail">Right now · ${pos.label}</div>
+  `;
+  $('avgDb').textContent = isCurfew() ? '' : `Approx. average peak noise ~${avgDb} dB · frequency and spacing factored in`;
+
+  let rt = 'Compared with a typical day in your area.';
+  if (pos.dir === 'north' && mode === 'south') rt = 'Louder / busier than normal for your area (south flow).';
+  if (pos.dir === 'north' && mode === 'north') rt = 'Quieter than average for your area (north flow).';
+  if (isCurfew()) rt = 'Curfew in effect.';
+  $('relative').innerHTML = `
+    <div class="badge ${rel.level}">${rel.label}</div>
+    <div class="bar"><div class="fill" style="width:${relS}%;background:${rel.color}"></div></div>
+    <div class="detail">${rt}</div>
+  `;
+
+  let rl = 'Moderate';
+  let suburbText = 'Typical suburban exposure';
+  if (base >= 80) { rl = 'Very High'; suburbText = 'Among the most affected suburbs (close northern corridor)'; }
+  else if (base >= 70) { rl = 'High'; suburbText = 'High-exposure inner-west / northern suburbs'; }
+  else if (base >= 55) { rl = 'Above Average'; suburbText = 'Noticeably affected compared with most Sydney suburbs'; }
+  else if (base >= 40) { rl = 'Moderate'; suburbText = 'Average exposure for greater Sydney'; }
+  else { rl = 'Lower'; suburbText = 'Quieter than most areas near the airport corridors'; }
+
+  $('rank').innerHTML = `<div class="detail"><strong>${rl} exposure</strong></div><div class="status">Score ${base}/100 vs Sydney suburbs</div>`;
+  $('suburbRating').textContent = suburbText;
+
+  $('volumeNote').textContent = isWeekend()
+    ? 'Weekend – typically lower overall volume than weekdays'
+    : 'Weekday – higher typical volume, especially morning & evening peaks';
+
+  $('wind').innerHTML = `
+    <div class="row"><span>Wind</span><span>${state.windDir ?? '—'}° at ${state.windSpeed ?? '—'} kt</span></div>
+    <div class="row"><span>Mode</span><span>${mode || '—'}</span></div>
+  `;
+
+  const curfewMins = minsToCurfew();
+  if (isCurfew()) {
+    $('curfewDisplay').textContent = 'Active';
+    $('curfewSub').textContent = 'No commercial flights until 6am';
+  } else {
+    const h = Math.floor(curfewMins / 60);
+    const m = curfewMins % 60;
+    $('curfewDisplay').textContent = `${h}h ${m}m`;
+    $('curfewSub').textContent = 'Until curfew starts (11pm)';
+  }
+
+  if (forecasts.length) {
+    $('forecastImpact').innerHTML = forecasts.map(f => `
+      <div class="forecast-item">
+        <strong>${f.label}</strong>: from ${f.dir}° at ${f.spd} kt<br>
+        Mode: ${f.mode || '—'} → <span class="badge ${f.level.toLowerCase()}" style="font-size:0.75rem;padding:0.15rem 0.5rem;">${f.level}</span><br>
+        <span class="status">${f.impact}</span>
+      </div>
+    `).join('');
+  } else {
+    $('forecastImpact').innerHTML = '<div class="status">No forecast wind changes available</div>';
+  }
+
+  $('weatherImpact').innerHTML = `<div class="detail">${weatherNoiseNote()}</div>
+    <div class="status">Based on current METAR at Sydney Airport</div>`;
+}
+
+function fillSeasonalGuide() {
+  const el = $('seasonalGuide');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="detail" style="margin-bottom:0.6rem;">Typical patterns for northern inner-west (Stanmore / Petersham area). South Flow generally higher impact.</div>
+    <div class="row"><span>Dec–Feb (Summer)</span><span>Mostly South Flow</span></div>
+    <div class="row"><span>Impact</span><span style="color:var(--high)">Higher</span></div>
+    <div class="row"><span>Mar–May (Autumn)</span><span>Variable / increasing North</span></div>
+    <div class="row"><span>Impact</span><span style="color:var(--medium)">Medium</span></div>
+    <div class="row"><span>Jun–Aug (Winter)</span><span>More North Flow</span></div>
+    <div class="row"><span>Impact</span><span style="color:var(--low)">Lower</span></div>
+    <div class="row"><span>Sep–Nov (Spring)</span><span>Variable, South Flow common</span></div>
+    <div class="row"><span>Impact</span><span style="color:var(--medium)">Medium–Higher</span></div>
+    <div class="status" style="margin-top:0.5rem;">Based on long-term Sydney wind patterns and Airservices flight-path data. Weekly variation still depends on actual wind.</div>
+  `;
+}
+
+async function loadFlights() {
+  if (isCurfew()) {
+    $('flights').innerHTML = '<div class="status">Curfew – no commercial activity</div>';
+    return;
+  }
+  $('flights').innerHTML = '<div class="status">Loading flights…</div>';
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    const r = await fetch('https://planedata.io/api/airports/YSSY/board', { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!r.ok) throw new Error('bad status');
+    const d = await r.json();
+    const now = Date.now() / 1000;
+
+    let combined = [
+      ...(d.arrivals || []).map(f => ({ ...f, type: 'arrival' })),
+      ...(d.departures || []).map(f => ({ ...f, type: 'departure' }))
+    ];
+
+    const seen = new Map();
+    combined.forEach(f => {
+      const key = f.flight || f.callsign;
+      if (!key) return;
+      if (!seen.has(key) || f.status === 'active') seen.set(key, f);
+    });
+
+    const list = Array.from(seen.values())
+      .map(f => {
+        let etaMin = 90;
+        if (typeof f.eta === 'number') etaMin = Math.max(0, (f.eta - now) / 60);
+        else if (typeof f.time === 'number') etaMin = Math.max(0, (f.time - now) / 60);
+        return { ...f, etaMin };
+      })
+      .filter(f => f.etaMin > 1 && f.etaMin <= 180 && f.status !== 'lost');
+
+    state.nearArrivals = list.filter(f => f.type === 'arrival').length;
+    state.nearDepartures = list.filter(f => f.type === 'departure').length;
+
+    const times = list.map(f => f.etaMin).sort((a, b) => a - b);
+    state.avgGapMin = times.length >= 2
+      ? times.slice(1).reduce((sum, t, i) => sum + (t - times[i]), 0) / (times.length - 1)
+      : 40;
+
+    const sorted = [...list]
+      .sort((a, b) => a.etaMin - b.etaMin || noiseDb(b.aircraft) - noiseDb(a.aircraft))
+      .slice(0, 10);
+
+    if (!sorted.length) {
+      $('flights').innerHTML = '<div class="status">No flights in the next 3 hours</div>';
+      return;
+    }
+
+    $('flights').innerHTML = sorted.map(f => {
+      const db = noiseDb(f.aircraft);
+      const eta = f.etaMin < 5 ? 'imminent' : `${Math.round(f.etaMin)} min`;
+      const kind = f.type === 'departure' ? 'Dep' : 'Arr';
+      return `<div class="flight">
+        <strong>${f.flight || f.callsign || '—'}</strong> ${f.aircraft || '—'} <span class="status">(${kind})</span>
+        <span class="eta"> · ${eta}</span><br>
+        <span class="status">${f.airline || ''} · <span class="db">~${db} dB</span></span>
+      </div>`;
+    }).join('') + '<div class="status">Sorted by soonest · updates every 3 min</div>';
+
+    render();
+  } catch (e) {
+    $('flights').innerHTML = '<div class="status">Flight data unavailable (timeout or error)</div>';
+  }
+}
+
+async function loadAll() {
+  try {
+    const r = await fetch('https://rotatepilot.com/api/v1/metar?icao=YSSY&taf=1');
+    const d = await r.json();
+    state.windDir = d.windDir;
+    state.windSpeed = d.windSpeedKt;
+    state.taf = d.taf;
+    state.weather = d.weather || '';
+    state.clouds = d.cloudLayers || [];
+  } catch {}
+  render();
+  loadFlights();
+}
+
+// Auto-refresh flights and conditions every 3 minutes
+setInterval(loadAll, 3 * 60 * 1000);
+
+$('useLocation').onclick = () => {
+  if (!navigator.geolocation) {
+    $('locStatus').textContent = 'Geolocation not supported';
+    return;
+  }
+  $('locStatus').textContent = 'Requesting permission…';
+  navigator.geolocation.getCurrentPosition(
+    p => {
+      state.lat = p.coords.latitude;
+      state.lon = p.coords.longitude;
+      $('locStatus').textContent = 'Using your location';
+      loadAll();
+      fillSeasonalGuide();
+    },
+    err => {
+      $('locStatus').textContent = err.code === 1
+        ? 'Location blocked — enable it for this site in browser settings'
+        : 'Location unavailable — using demo (north of airport)';
+      loadAll();
+    },
+    { enableHighAccuracy: true, timeout: 15000 }
+  );
+};
+
+$('shareBtn').onclick = () => {
+  const text = `Sydney Airport noise right now – check the relative rating for your area.`;
+  if (navigator.share) navigator.share({ title: 'Airport Noise', text, url: location.href });
+  else navigator.clipboard?.writeText(location.href).then(() => alert('Link copied'));
+};
+
+loadAll();
+fillSeasonalGuide();
+</script>
+</body>
+</html>
